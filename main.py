@@ -97,10 +97,14 @@ def get_doctors_info(context, speciality_name, specialities):
     url = BASE_URL + ENDPOINTS['DOCTORS_INFO']
     response = requests.post(url, json=context)
     json_response = json.loads(response.text)
+    doctors_dict = {}
+
     return json_response
 
 z = get_doctors_info(context, 'Физиотерапевт', specialities)
 print(z)
 
+def get_doctor_schedule():
+    pass
 
     
