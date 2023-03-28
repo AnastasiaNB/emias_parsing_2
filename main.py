@@ -1,6 +1,6 @@
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, date, time
 
 from json_templates import get_specialists_info_json, get_doctor_info_json, get_doctor_schedule_json, create_appointment_json
 from user_data import speciality_name, best_time, best_date
@@ -82,17 +82,58 @@ def get_doctor_schedule(context, doctor_dict):
     return schedule_dict
 
 SCHEDULE_DICT = get_doctor_schedule(get_doctor_schedule_json, DOCTORS_DICT)
-print(SCHEDULE_DICT)
+# print(SCHEDULE_DICT)
 
-def create_appointment(context, schedule_dict, b):
+def find_nearest_date(doctor_data, best_date):
+    best_iso = date.fromisoformat(best_date)
+    try:
+        possible_time_list = doctor_data['schedule'][best_date]
+    except KeyError:
+        possible_date_list = [date.fromisoformat(_) for _ in doctor_data['schedule'].keys()]
+        nearest_date = min(possible_date_list, key=lambda x: abs(x-best_iso))
+        possible_time_list = doctor_data['schedule'][str(nearest_date)]
+    return possible_time_list
+
+def find_nearest_time(doctor_data, best_time):
+    best_iso = time.fromisoformat(best_time)
+    start_end_time_list = doctor_data['schedule'].values()
+    possible_time_list = []
+    for times in start_end_time_list:
+        for t in times:
+            if best_iso == t[0].time():
+                return t
+            possible_time_list.append(t[0].time())
+    # nearest_time = 
+            
+
+
+
+
+    
+
+
+def create_appointment(context, schedule_dict, best_date=None, best_time=None):
     """
     Creating appointment by the best coincidence to nesessary date and time
     """
-    best_date_iso = datetime.date.fromisoformat(best_date)
-    best_time_iso = datetime.time.fromisoformat(best_time)
+    if best_date and best_time:
+        best_iso = datetime.fromisoformat(best_date + 'T' + best_time + ':00')
+    for doctor_data in schedule_dict.values():
+        if best_date and best_time:
+            pass
+        elif best_date:
+            possible_time_list = find_nearest_date(doctor_data, best_date)
+            context['startTime'], context['endTime'] = possible_time_list[0][0], possible_time_list[0][1]
+        elif best_time:
+            find_nearest_time(doctor_data, best_time)
 
-    pass
+
+                
+        # print(context)
+        
+
+
 
     
-create_appointment(create_appointment_json, SCHEDULE_DICT, best_date, best_time)
+create_appointment(create_appointment_json, SCHEDULE_DICT, best_time=best_time)
 
