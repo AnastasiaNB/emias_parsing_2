@@ -1,5 +1,9 @@
 import requests
 import json
+from datetime import datetime
+
+from json_templates import get_specialists_info_json, get_doctor_info_json, get_doctor_schedule_json, create_appointment_json
+from user_data import speciality_name, best_time, best_date
 
 BASE_URL = 'https://emias.info/api/emc/appointment-eip/v1/'
 ENDPOINTS = {
@@ -10,41 +14,11 @@ ENDPOINTS = {
     'GET_APPOINTMENT': '?getAppointmentReceptionsByPatient'
 
 }
-OMS_NUMBER = '3656100896000147'
-BIRTH_DATE = '1998-03-03'
-ID = 'RneyzJNzOMaglqe0KXcOK'
-
-context_1 = {
-    "jsonrpc": "2.0",
-    "id": ID,
-    "method": "getSpecialitiesInfo",
-    "params": {
-        "omsNumber": OMS_NUMBER,
-        "birthDate": BIRTH_DATE
-    }
-}
-
-context = {
-    "jsonrpc": "2.0",
-    "id": "WBi_CZivOTAOrVMgDSfMl",
-    "method": "getAvailableResourceScheduleInfo",
-    "params": {
-        "omsNumber": "3656100896000147",
-        "birthDate": "1998-03-03",
-        "availableResourceId": 11161541,
-        "complexResourceId": 10061900,
-        "specialityId": "3"
-    }
-}
-
-# url = BASE_URL + ENDPOINTS['SPECIALISTS_INFO']
-# r = requests.post(url, json=context_1)
-# z = r.text
-# json_response = json.loads(z)
-# print(json_response)
-# print(type(z))
 
 def get_available_specialists(context):
+    """
+    Getting available doctors specialities
+    """
     url = BASE_URL + ENDPOINTS['SPECIALISTS_INFO']
     response = requests.post(url, json=context)
     data = response.text
@@ -57,54 +31,68 @@ def get_available_specialists(context):
             specialist_dict[_['name']] = [_['code'], False]
     return specialist_dict
 
-specialities = get_available_specialists(context_1)
-# print(specialities['Хирург'][0])
-
-
-context_2 = {
-    "jsonrpc": "2.0",
-    "id": ID,
-    "method": "getDoctorsInfo",
-    "params": {
-        "omsNumber": OMS_NUMBER,
-        "birthDate": BIRTH_DATE,
-        "specialityId": specialities['Физиотерапевт'][0],
-        # "referralId" 121903232664
-    }
-}
-
-context_21 = {
-    "jsonrpc": "2.0",
-    "id": ID,
-    "method": "getDoctorsInfo",
-    "params": {
-        "omsNumber": OMS_NUMBER,
-        "birthDate": BIRTH_DATE,
-        "specialityId": specialities['Хирург'][0],
-    }
-}
+SPECIALITIES_DICT = get_available_specialists(get_specialists_info_json)
 
 def get_doctors_info(context, speciality_name, specialities):
-    try:
-        context['params'].pop('availableResourceId')
-        context['params'].pop('complexResourceId')
-    except KeyError:
-        pass
-    context['method'] = 'getDoctorsInfo'
+    """
+    Getting doctor list for chosen speciality
+    """
     context['params']['specialityId'] = specialities[speciality_name][0]
-    if specialities[speciality_name][1] == True:
-        context['params']['referralId'] = 121903232664
+    if specialities[speciality_name][1] is True:
+        context['params']['referralId'] = 121903232664  # def get_refferals_id()
     url = BASE_URL + ENDPOINTS['DOCTORS_INFO']
     response = requests.post(url, json=context)
     json_response = json.loads(response.text)
     doctors_dict = {}
+    for _ in json_response['result']:
+        doctors_dict[_['name']] = [
+            _['arSpecialityId'],
+            _['id'],
+            _['complexResource'][0]['id']
+            ]
 
-    return json_response
+    return doctors_dict
 
-z = get_doctors_info(context, 'Физиотерапевт', specialities)
-print(z)
 
-def get_doctor_schedule():
+DOCTORS_DICT = get_doctors_info(get_doctor_info_json, speciality_name, SPECIALITIES_DICT)
+
+def get_doctor_schedule(context, doctor_dict):
+    """
+    Getting schedule for doctors in doctor list
+    """
+    url = BASE_URL + ENDPOINTS['DOCTOR_SCHEDULE']
+    schedule_dict = {}
+    for name in doctor_dict.keys():
+        ids = doctor_dict[name]
+        context['params']['specialityId'] = ids[0]
+        context['params']['availableResourceId'] = ids[1]
+        context['params']['complexResourceId'] = ids[2]
+        response = requests.post(url, json=context)
+        json_response = json.loads(response.text)
+        datetime_dict = {}
+        for _ in json_response['result']['scheduleOfDay']:
+            datetime_dict[_['date']] = [[datetime.fromisoformat(time['startTime']), datetime.fromisoformat(time['endTime'])] for time in _['scheduleBySlot'][0]['slot']]
+        schedule_dict[name] = {
+            'specialityId': ids[0],
+            'availableResourceId': ids[1],
+            'complexResourceId': ids[2],
+            'receptionTypeId': json_response['result']['availableResource']['receptionType'][0]['code'],
+            'schedule': datetime_dict,
+            }
+    return schedule_dict
+
+SCHEDULE_DICT = get_doctor_schedule(get_doctor_schedule_json, DOCTORS_DICT)
+print(SCHEDULE_DICT)
+
+def create_appointment(context, schedule_dict, b):
+    """
+    Creating appointment by the best coincidence to nesessary date and time
+    """
+    best_date_iso = datetime.date.fromisoformat(best_date)
+    best_time_iso = datetime.time.fromisoformat(best_time)
+
     pass
 
     
+create_appointment(create_appointment_json, SCHEDULE_DICT, best_date, best_time)
+

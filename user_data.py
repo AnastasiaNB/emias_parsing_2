@@ -1,0 +1,8 @@
+OMS_NUMBER = '3656100896000147'
+BIRTH_DATE = '1998-03-03'
+ID = 'RneyzJNzOMaglqe0KXcOK'
+best_time = '15:00'
+best_date = '2023-04-04'
+best_datetime  = best_date + 'T' + best_time + ':00'
+speciality_name = 'Хирург'
+# speciality_name = 'Физиотерапевт'
