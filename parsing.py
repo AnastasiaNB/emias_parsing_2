@@ -4,8 +4,10 @@ from datetime import datetime, date, time
 
 from json_templates import get_specialists_info_json, get_doctor_info_json, get_doctor_schedule_json, create_appointment_json
 from user_data import speciality_name, best_time, best_date
-from models import Speciality, engine, emias_parser
-from sqlalchemy.orm import sessionmaker
+from database import engine
+from tables import users, refferals, appointments, doctors, specialities, schedule
+from sqlalchemy.exc import IntegrityError
+
 
 BASE_URL = 'https://emias.info/api/emc/appointment-eip/v1/'
 ENDPOINTS = {
@@ -17,10 +19,6 @@ ENDPOINTS = {
 
 }
 
-SessionLocal = sessionmaker(autoflush=False, bind=engine)
-db = SessionLocal()
-
-@emias_parser.post('/specialities/')
 def get_available_specialists(context: dict):
     """
     Getting available doctors specialities
@@ -29,72 +27,100 @@ def get_available_specialists(context: dict):
     response = requests.post(url, json=context)
     data = response.text
     json_response = json.loads(data)
-    print(json_response)
+    conn = engine.connect()
     for _ in json_response['result']:
-        speciality = Speciality(
-            name = _['name'],
-            code = int(_['code']),
-            onlyByRefferal = False
-        )
         try:
-            speciality.onlyByRefferal = _['onlyByRefferal']
+            onlyByRefferal = _['onlyByRefferal']
         except KeyError:
+            onlyByRefferal = False
+        insert_spec = specialities.insert().values(
+                name = _['name'],
+                code = int(_['code']),
+                onlyByRefferal = onlyByRefferal
+            )
+        try:
+            conn.execute(insert_spec)
+        except IntegrityError:
             pass
-        db.add(speciality)
-    db.commit()
-    return db.query(Speciality).all()
+    conn.commit()
+    select_spec = specialities.select()
+    spec_names = []
+    spec_list = conn.execute(select_spec)
+    for spec in spec_list:
+        spec_names.append(spec[1])
+    return spec_names 
 
-# SPECIALITIES_DICT = get_available_specialists(get_specialists_info_json)
+SPECIALITIES_DICT = get_available_specialists(get_specialists_info_json)
 
-def get_doctors_info(context, speciality_name, specialities):
+def get_doctors_info(context: dict, speciality_name):
     """
     Getting doctor list for chosen speciality
     """
-    context['params']['specialityId'] = specialities[speciality_name][0]
-    if specialities[speciality_name][1] is True:
+    select_spec = specialities.select().where(specialities.c.name == speciality_name)
+    conn = engine.connect()
+    speciality = conn.execute(select_spec).first()
+    context['params']['specialityId'] = speciality[0]
+    if speciality[2] is True:
         context['params']['referralId'] = 121903232664  # def get_refferals_id()
     url = BASE_URL + ENDPOINTS['DOCTORS_INFO']
     response = requests.post(url, json=context)
     json_response = json.loads(response.text)
-    doctors_dict = {}
     for _ in json_response['result']:
-        doctors_dict[_['name']] = [
-            _['arSpecialityId'],
-            _['id'],
-            _['complexResource'][0]['id']
-            ]
+        insert_doc = doctors.insert().values(
+                speciality_id = _['arSpecialityId'],
+                id = _['id'],
+                complex_id = _['complexResource'][0]['id'],
+                name = _['name']
+            )
+        try:
+            conn.execute(insert_doc)
+        except IntegrityError:
+            pass
+    conn.commit()
+    return 
 
-    return doctors_dict
 
+DOCTORS_DICT = get_doctors_info(get_doctor_info_json, 'Хирург')
 
-# DOCTORS_DICT = get_doctors_info(get_doctor_info_json, speciality_name, SPECIALITIES_DICT)
-
-def get_doctor_schedule(context, doctor_dict):
+def get_doctor_schedule(context):
     """
     Getting schedule for doctors in doctor list
     """
     url = BASE_URL + ENDPOINTS['DOCTOR_SCHEDULE']
-    schedule_dict = {}
-    for name in doctor_dict.keys():
-        ids = doctor_dict[name]
-        context['params']['specialityId'] = ids[0]
-        context['params']['availableResourceId'] = ids[1]
-        context['params']['complexResourceId'] = ids[2]
+    conn = engine.connect()
+    docs = conn.execute(doctors.select()).fetchall()
+    for doc in docs:
+        context['params']['specialityId'] = doc[3]
+        context['params']['availableResourceId'] = doc[0]
+        context['params']['complexResourceId'] = doc[2]
         response = requests.post(url, json=context)
         json_response = json.loads(response.text)
-        datetime_dict = {}
         for _ in json_response['result']['scheduleOfDay']:
-            datetime_dict[_['date']] = [[datetime.fromisoformat(time['startTime']), datetime.fromisoformat(time['endTime'])] for time in _['scheduleBySlot'][0]['slot']]
-        schedule_dict[name] = {
-            'specialityId': ids[0],
-            'availableResourceId': ids[1],
-            'complexResourceId': ids[2],
-            'receptionTypeId': json_response['result']['availableResource']['receptionType'][0]['code'],
-            'schedule': datetime_dict,
-            }
-    return schedule_dict
+            day = _['date']
+            possible_times = _['scheduleBySlot'][0]['slot']
+            for time in possible_times:
+                start_time = time['startTime']
+                end_time = time['endTime']
+                insert_time = schedule.insert().values(
+                    day = day,
+                    start_time = datetime.fromisoformat(start_time),
+                    end_time = datetime.fromisoformat(end_time)
+                )
+                try:
+                    conn.execute(insert_time)
+                except IntegrityError:
+                    pass
+    conn.commit()
+        # schedule_dict[name] = {
+        #     'specialityId': ids[0],
+        #     'availableResourceId': ids[1],
+        #     'complexResourceId': ids[2],
+        #     'receptionTypeId': json_response['result']['availableResource']['receptionType'][0]['code'],
+        #     'schedule': datetime_dict,
+        #     }
+    return 
 
-# SCHEDULE_DICT = get_doctor_schedule(get_doctor_schedule_json, DOCTORS_DICT)
+SCHEDULE_DICT = get_doctor_schedule(get_doctor_schedule_json)
 # print(SCHEDULE_DICT) 
 
 def find_nearest_date(doctor_data, best_date):
