@@ -11,6 +11,16 @@ get_specialists_info_json = {
     }
 }
 
+get_refferals_json = {
+    "jsonrpc": "2.0",
+    "id": "XrvEZXHpaz4aXaxi7Hg4e",
+    "method": "getReferralsInfo",
+    "params": {
+        "omsNumber": "3656100896000147",
+        "birthDate": "1998-03-03"
+    }
+}
+
 get_doctor_info_json = {
     "jsonrpc": "2.0",
     "id": ID,

@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, MetaData, Table
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, MetaData, Table, UniqueConstraint
 
 
 metadata = MetaData()
@@ -36,7 +36,7 @@ doctors = Table(
     Column('name', String),
     Column('complex_id', Integer),
     Column('speciality_id', Integer, ForeignKey('specialities.code')),
-    Column('schedule_id', Integer, ForeignKey('schedule.id'), nullable=True),
+    Column('receptionType', Integer)
 )
 
 
@@ -47,6 +47,15 @@ schedule = Table(
     Column('day', String),
     Column('start_time', TIMESTAMP),
     Column('end_time', TIMESTAMP),
+    UniqueConstraint('start_time', 'end_time', name='time_constraint')
+)
+
+
+doctor_schedule = Table(
+    'doc_schedule',
+    metadata,
+    Column('doctor_id', Integer, ForeignKey('doctors.id')),
+    Column('schedule_id', Integer, ForeignKey('schedule.id'))
 )
 
 
