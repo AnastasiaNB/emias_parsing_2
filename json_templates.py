@@ -1,5 +1,8 @@
-from user_data import ID, OMS_NUMBER, BIRTH_DATE
 
+
+ID = 'Po65Xlo_f_8rJKBVHWJCW' # put to .env
+OMS_NUMBER = '3656100896000147'
+BIRTH_DATE = '1998-03-03'
 
 get_specialists_info_json = {
     "jsonrpc": "2.0",
@@ -48,11 +51,5 @@ create_appointment_json = {
     "params": {
         "omsNumber": OMS_NUMBER,
         "birthDate": BIRTH_DATE,
-        # "availableResourceId": 13277127,
-        # "complexResourceId": 10061897,
-        # "receptionTypeId": "1913",
-        # "specialityId": "3",
-        # "startTime": "2023-04-05T13:20:00.000+03:00",
-        # "endTime": "2023-04-05T13:40:00.000+03:00"
     }
 }

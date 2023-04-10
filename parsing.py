@@ -1,13 +1,12 @@
 import requests
 import json
-from datetime import datetime, date, time, timedelta
+from datetime import datetime
 
-from json_templates import get_specialists_info_json, get_doctor_info_json, get_doctor_schedule_json, create_appointment_json, get_refferals_json
-from user_data import speciality_name, best_time, best_date
+
 from database import engine
-from tables import users, refferals, appointments, doctors, specialities, schedule, doctor_schedule
+from tables import refferals, doctors, specialities, schedule, doctor_schedule
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import update
+from utils import find_nearest_date, find_nearest_time
 
 
 BASE_URL = 'https://emias.info/api/emc/appointment-eip/v1/'
@@ -41,7 +40,6 @@ def get_refferals(context):
             pass
     conn.commit()
 
-a = get_refferals(get_refferals_json)
 
 def get_available_specialists(context: dict):
     """
@@ -74,23 +72,19 @@ def get_available_specialists(context: dict):
         spec_names.append(spec[1])
     return spec_names 
 
-SPECIALITIES_DICT = get_available_specialists(get_specialists_info_json)
 
 def get_doctors_info(context: dict, speciality_name):
     """
     Getting doctors for chosen speciality
     """
     select_spec = specialities.select().where(specialities.c.name == speciality_name)
-    user_id = context['params']['omsNumber'], # get it from user table
+    user_id = "3656100896000147" # get it from user table
     conn = engine.connect()
     speciality = conn.execute(select_spec).first()
     speciality_id = speciality[0]
-    refferal_id = conn.execute(refferals.select().where(
-        refferals.c.user_id==user_id,
-        refferals.c.speciality_id==speciality_id
-    )).first()[0]
     context['params']['specialityId'] = speciality_id
     if speciality[2] is True:
+        refferal_id = conn.execute(refferals.select().where(refferals.c.user_id==user_id,refferals.c.speciality_id==speciality_id)).first()[0]
         context['params']['referralId'] = refferal_id
     url = BASE_URL + ENDPOINTS['DOCTORS_INFO']
     response = requests.post(url, json=context)
@@ -111,19 +105,26 @@ def get_doctors_info(context: dict, speciality_name):
     return 
 
 
-DOCTORS_DICT = get_doctors_info(get_doctor_info_json, 'Физиотерапевт')
-
-def get_doctor_schedule(context):
+def get_doctor_schedule(context, speciality_name):
     """
     Getting available schedule
     """
     url = BASE_URL + ENDPOINTS['DOCTOR_SCHEDULE']
     conn = engine.connect()
-    docs = conn.execute(doctors.select()).fetchall()
+    speciality_id = conn.execute(specialities.select().where(specialities.c.name==speciality_name)).first()[0]
+    docs = conn.execute(doctors.select().where(doctors.c.speciality_id==speciality_id)).fetchall()
     for doc in docs:
         context['params']['specialityId'] = doc[3]
         context['params']['availableResourceId'] = doc[0]
         context['params']['complexResourceId'] = doc[2]
+        speciality = conn.execute(specialities.select().where(specialities.c.code==doc[3])).first()
+        if speciality[2] is True:
+            user_id = "3656100896000147" # get from user table
+            refferal_id = conn.execute(refferals.select().where(
+                refferals.c.user_id==user_id,
+                refferals.c.speciality_id==speciality[0]
+            )).first()[0]
+            context['params']['referralId'] = refferal_id
         response = requests.post(url, json=context)
         json_response = json.loads(response.text)
         for _ in json_response['result']['scheduleOfDay']:
@@ -142,7 +143,7 @@ def get_doctor_schedule(context):
                 except IntegrityError:
                     pass
                 
-                schedule_id = conn.execute(schedule.select()).fetchall()[-1][0]
+                schedule_id = conn.execute(schedule.select().where(schedule.c.start_time==datetime.fromisoformat(start_time))).first()[0]
                 conn.execute(doctor_schedule.insert().values(
                     schedule_id=schedule_id,
                     doctor_id = doc[0]
@@ -150,41 +151,15 @@ def get_doctor_schedule(context):
     conn.commit()
     return 
 
-SCHEDULE_DICT = get_doctor_schedule(get_doctor_schedule_json)
 
-def find_nearest_date(best_date):
-    conn = engine.connect()
-    select_best_day = schedule.select().where(schedule.c.day==best_date)
-    times = conn.execute(select_best_day)
-    if times.fetchall() == []:
-        select_unique_day = schedule.select().group_by('day')
-        days = [date.fromisoformat(day[1]) for day in conn.execute(select_unique_day).fetchall()]
-        best_iso = date.fromisoformat(best_date)
-        best_date = min(days, key = lambda x: abs(best_iso - x))
-        return best_date
-    return best_date
-
-def find_nearest_time(best_time, best_date = None):
-    conn = engine.connect()
-    if best_date:
-        date = '{}T{}:00'.format(best_date, best_time)
-        iso_date = datetime.fromisoformat(date)
-        select_best_day = schedule.select().where(schedule.c.day==best_date)
-        start_times = [day[2] for day in conn.execute(select_best_day).fetchall()]
-        best_time = min(start_times, key = lambda x: abs(iso_date - x))
-        return best_time
-    start_times = [day[2] for day in conn.execute(schedule.select()).fetchall()]
-    time_iso = time.fromisoformat('{}:00'.format(best_time))
-    best_time = min(start_times, key = lambda x: abs(
-        timedelta(hours=time_iso.hour, minutes=time_iso.minute) - timedelta(hours=x.hour, minutes=x.minute)))
-    return best_time
-
-
-def create_appointment(context, best_date=None, best_time=None):
+def create_appointment(context,  speciality_name, best_date=None, best_time=None,):
     """
     Creating appointment by the best coincidence to nesessary date and time
     """
     conn = engine.connect()
+    speciality_id = conn.execute(specialities.select().where(specialities.c.name==speciality_name)).first()[0]
+    docs = conn.execute(doctors.select().where(doctors.c.speciality_id==speciality_id)).fetchall()
+    docs_ids = [doc[0] for doc in docs]
     if best_time:
         time = find_nearest_time(best_date=best_date, best_time=best_time)
         schedule_item = conn.execute(schedule.select().where(schedule.c.start_time==time)).first()
@@ -194,39 +169,34 @@ def create_appointment(context, best_date=None, best_time=None):
     schedule_id = schedule_item[0]
     start_time = '{}+03:00'.format(schedule_item[2].isoformat())
     end_time = '{}+03:00'.format(schedule_item[3].isoformat())
-    select_doc_schedule_item = doctor_schedule.select().where(doctor_schedule.c.schedule_id==schedule_id)
+    select_doc_schedule_item = doctor_schedule.select().where(
+        (doctor_schedule.c.schedule_id==schedule_id) &
+        (doctor_schedule.c.doctor_id.in_(docs_ids))
+    )
     doctor_id = conn.execute(select_doc_schedule_item).first()[0]
     doctor = conn.execute(doctors.select().where(doctors.c.id==doctor_id)).first()
     complex_id = doctor[2]
     receptionType = doctor[4]
     speciality_id = doctor[3]
+    speciality = conn.execute(specialities.select().where(specialities.c.code==speciality_id)).first()
     context['params']['availableResourceId'] = doctor_id
     context['params']['complexResourceId'] = complex_id
-    context['params']['receptionTypeId'] = receptionType
     context['params']['specialityId'] = speciality_id
     context['params']['startTime'] = start_time
     context['params']['endTime'] = end_time
+    if speciality[2] == True:
+        user_id = "3656100896000147" # get from user table
+        refferal_id = conn.execute(refferals.select().where(
+            refferals.c.user_id==user_id,
+            refferals.c.speciality_id==speciality_id
+        )).first()[0]
+        context['params']['referralId'] = refferal_id
+    else:
+        context['params']['receptionTypeId'] = receptionType
     url = BASE_URL + ENDPOINTS['CREATE_APPOINTMENTS']
     response = requests.post(url, json=context)
-    data = response.text
-    json_response = json.loads(data)
-    appointment_id = json_response['result']['appointmentId']
     if response.status_code == 200:
-        create_appointment = appointments.insert().values(
-            id = appointment_id,
-            time = schedule_id,
-            user_id = context['params']['omsNumber'], # get it from user table
-            doctor_id = doctor_id
-        )
-        conn.execute(create_appointment)
+        conn.execute(doctor_schedule.delete())
+        conn.execute(schedule.delete())
         conn.commit()
-
-                
-        # print(context)
-# a = create_appointment(context=create_appointment_json, best_date=best_date, best_time=best_time)        
-
-
-
-    
-# create_appointment(create_appointment_json, SCHEDULE_DICT, best_time=best_time)
 

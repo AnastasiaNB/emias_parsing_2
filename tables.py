@@ -10,8 +10,6 @@ users = Table(
     Column('birth_date', String)
 )
    
-
-
 refferals = Table(
     'refferals',
     metadata,
@@ -56,14 +54,4 @@ doctor_schedule = Table(
     metadata,
     Column('doctor_id', Integer, ForeignKey('doctors.id')),
     Column('schedule_id', Integer, ForeignKey('schedule.id'))
-)
-
-
-appointments = Table(
-    'appointments',
-    metadata,
-    Column('id', Integer, primary_key=True, unique=True),
-    Column('time', Integer, ForeignKey('schedule.id')),
-    Column('user_id', Integer, ForeignKey('users.oms_number')),
-    Column('doctor_id', Integer, ForeignKey('doctors.id'))
 )
