@@ -1,4 +1,4 @@
-from parsing import engine
+from database import engine
 from tables import schedule
 from datetime import date, time, datetime, timedelta
 

@@ -6,7 +6,7 @@ from datetime import datetime
 from database import engine
 from tables import refferals, doctors, specialities, schedule, doctor_schedule
 from sqlalchemy.exc import IntegrityError
-from utils import find_nearest_date, find_nearest_time
+from funcs import find_nearest_date, find_nearest_time 
 
 
 BASE_URL = 'https://emias.info/api/emc/appointment-eip/v1/'
@@ -19,7 +19,7 @@ ENDPOINTS = {
 }
 
 
-def get_refferals(context):
+def get_refferals(context, oms_number):
     """
     Getting refferals
     """
@@ -27,11 +27,12 @@ def get_refferals(context):
     response = requests.post(url, json=context)
     data = response.text
     json_response = json.loads(data)
+    print(json_response)
     conn = engine.connect()
     for _ in json_response['result']:
         create_refferal = refferals.insert().values(
             id = _['id'],
-            user_id = "3656100896000147", # get it from user table
+            user_id = oms_number,
             speciality_id = _['toDoctor']['specialityId']
         )
         try:
@@ -41,7 +42,7 @@ def get_refferals(context):
     conn.commit()
 
 
-def get_available_specialists(context: dict):
+def get_available_specialists(context):
     """
     Getting available specialities
     """
