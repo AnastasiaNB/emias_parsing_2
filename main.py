@@ -1,3 +1,5 @@
+# coding: utf-8
+
 from parsing import (
     get_refferals, get_available_specialists,
     get_doctors_info, get_doctor_schedule,
@@ -9,7 +11,7 @@ from json_templates import (
     get_refferals_json, create_template
 )
 from user_data import speciality_name, best_time, best_date
-from tables import users
+from tables import users, specialities
 from database import engine
 from sqlalchemy.exc import IntegrityError
 from telegram import Bot
@@ -17,6 +19,7 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, Conve
 import os
 from dotenv import load_dotenv
 import json
+from decoder import decode
 
 user_data = {}
 load_dotenv()
@@ -113,10 +116,11 @@ def get_doctor_list(update, context):
     get_reff_json = create_template(get_refferals_json, user_id, birth_date)
     get_refferals(get_reff_json, user_id)
     get_av_spec_json = create_template(get_specialists_info_json, user_id, birth_date)
-    doctor_list = [json.loads(spec) for spec in get_available_specialists(get_av_spec_json)]
+    spec_names = get_available_specialists(get_av_spec_json)
+    print(spec_names)
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text = doctor_list
+        text = [decode(spec) for spec in spec_names]
     )
     return ConversationHandler.END
 

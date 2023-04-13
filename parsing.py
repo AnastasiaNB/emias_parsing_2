@@ -27,7 +27,6 @@ def get_refferals(context, oms_number):
     response = requests.post(url, json=context)
     data = response.text
     json_response = json.loads(data)
-    print(json_response)
     conn = engine.connect()
     for _ in json_response['result']:
         create_refferal = refferals.insert().values(
@@ -66,12 +65,11 @@ def get_available_specialists(context):
         except IntegrityError:
             pass
     conn.commit()
-    select_spec = specialities.select()
     spec_names = []
-    spec_list = conn.execute(select_spec)
+    spec_list = conn.execute(specialities.select())
     for spec in spec_list:
         spec_names.append(spec[1])
-    return spec_names 
+    return spec_names
 
 
 def get_doctors_info(context: dict, speciality_name):
