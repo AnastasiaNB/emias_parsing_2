@@ -72,12 +72,11 @@ def get_available_specialists(context):
     return spec_names
 
 
-def get_doctors_info(context: dict, speciality_name):
+def get_doctors_info(context, speciality_name, user_id):
     """
     Getting doctors for chosen speciality
     """
     select_spec = specialities.select().where(specialities.c.name == speciality_name)
-    user_id = "3656100896000147" # get it from user table
     conn = engine.connect()
     speciality = conn.execute(select_spec).first()
     speciality_id = speciality[0]
@@ -104,7 +103,7 @@ def get_doctors_info(context: dict, speciality_name):
     return 
 
 
-def get_doctor_schedule(context, speciality_name):
+def get_doctor_schedule(context, speciality_name, user_id):
     """
     Getting available schedule
     """
@@ -118,7 +117,6 @@ def get_doctor_schedule(context, speciality_name):
         context['params']['complexResourceId'] = doc[2]
         speciality = conn.execute(specialities.select().where(specialities.c.code==doc[3])).first()
         if speciality[2] is True:
-            user_id = "3656100896000147" # get from user table
             refferal_id = conn.execute(refferals.select().where(
                 refferals.c.user_id==user_id,
                 refferals.c.speciality_id==speciality[0]
@@ -151,7 +149,7 @@ def get_doctor_schedule(context, speciality_name):
     return 
 
 
-def create_appointment(context,  speciality_name, best_date=None, best_time=None,):
+def create_appointment(context,  speciality_name, user_id, best_date=None, best_time=None):
     """
     Creating appointment by the best coincidence to nesessary date and time
     """
@@ -184,7 +182,6 @@ def create_appointment(context,  speciality_name, best_date=None, best_time=None
     context['params']['startTime'] = start_time
     context['params']['endTime'] = end_time
     if speciality[2] == True:
-        user_id = "3656100896000147" # get from user table
         refferal_id = conn.execute(refferals.select().where(
             refferals.c.user_id==user_id,
             refferals.c.speciality_id==speciality_id
@@ -198,4 +195,6 @@ def create_appointment(context,  speciality_name, best_date=None, best_time=None
         conn.execute(doctor_schedule.delete())
         conn.execute(schedule.delete())
         conn.commit()
+        return ('Appointment was created.')
+    return ('Error. Appointment was not created.')
 
