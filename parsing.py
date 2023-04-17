@@ -194,7 +194,8 @@ def create_appointment(context,  speciality_name, user_id, best_date=None, best_
     if response.status_code == 200:
         conn.execute(doctor_schedule.delete())
         conn.execute(schedule.delete())
+        conn.execute(doctors.delete())
+        conn.execute(specialities.delete())
         conn.commit()
         return ('Appointment was created.')
     return ('Error. Appointment was not created.')
-

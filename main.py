@@ -70,7 +70,7 @@ def get_birth_date(update, context):
     conn.commit()
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text = "Input best date for creating appointment as YYYY-MM-DD"
+        text = "Input best date for creating appointment as YYYY-MM-DD or /skip"
     )
     return 3
 
@@ -79,12 +79,16 @@ def get_best_date(update, context):
     user_data['best_date'] = best_date
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text = "Input best time for creating appointment as HH:MM"
+        text = "Input best time for creating appointment as HH:MM or /skip"
     )
     return 4
 
 def skip_best_date(update, context):
     user_data['best_date'] = None
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text = "Input best time for creating appointment as HH:MM"
+    )
     return 4
 
 def get_best_time(update, context):
@@ -92,7 +96,7 @@ def get_best_time(update, context):
     user_data['best_time'] = best_time
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text = "OMS Number: {}\n Best date: {}\n Best time: {}\n To confirm input OK".format(
+        text = "OMS Number: {}\nBest date: {}\nBest time: {}\nTo confirm input Ok\nTo return input Return".format(
             user_data['user_id'], user_data['best_date'], user_data['best_time']
         )
     )
@@ -102,7 +106,7 @@ def skip_best_time(update, context):
     user_data['best_time'] = None
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text = "OMS Number: {}\nBest date: {}\nBest time: {}\nTo confirm input OK".format(
+        text = "OMS Number: {}\nBest date: {}\nBest time: {}\nTo confirm input Ok\nTo return input Return".format(
             user_data['user_id'], user_data['best_date'], user_data['best_time']
         )
     )
@@ -128,6 +132,19 @@ def get_doctor_list(update, context):
         )
     return 6
 
+def main(context, speciality_name, user_id, best_date, best_time):
+    try: 
+        text = create_appointment(
+                context,
+                speciality_name,
+                user_id,
+                best_date,
+                best_time
+            )
+    except ValueError: # add time-dependent behavour
+        main(context, speciality_name, user_id, best_date, best_time)
+    return text
+
 def create_emias_appointment(update, context):
     speciality = update.message.text
     user_data['speciality'] = speciality
@@ -138,9 +155,17 @@ def create_emias_appointment(update, context):
     get_doc_info_json = create_template(get_doctor_info_json, user_id, birth_date)
     get_doc_sch_json = create_template(get_doctor_schedule_json, user_id, birth_date)
     create_app_json = create_template(create_appointment_json, user_id, birth_date)
-    get_doctors_info(get_doc_info_json, speciality, user_id)
+    try:
+        get_doctors_info(get_doc_info_json, speciality, user_id)
+    except KeyError:
+        text = 'Error. Appointment was not created.'
+        context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text = text
+        )
+        return ConversationHandler.END
     get_doctor_schedule(get_doc_sch_json, speciality, user_id)
-    text = create_appointment(
+    text = main(
         context=create_app_json,
         speciality_name=speciality,
         user_id=user_id,
@@ -161,7 +186,7 @@ handler = ConversationHandler(
         2: [MessageHandler(Filters.regex(r'\d{4}-\d\d-\d\d'), get_birth_date)],
         3: [MessageHandler(Filters.regex(r'\d{4}-\d\d-\d\d'), get_best_date), CommandHandler('skip', skip_best_date)],
         4: [MessageHandler(Filters.regex(r'\d\d:\d\d'), get_best_time), CommandHandler('skip', skip_best_time)],
-        5: [MessageHandler(Filters.regex(r'OK'), get_doctor_list)],
+        5: [MessageHandler(Filters.regex(r'Ok'), get_doctor_list), MessageHandler(Filters.regex(r'Return'), send_welcome)],
         6: [MessageHandler(Filters.text, create_emias_appointment)],
     },
     fallbacks=[]
